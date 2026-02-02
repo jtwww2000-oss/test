@@ -1,8 +1,9 @@
 ```mermaid
 graph TD
     %% --- 输入 ---
-    Input_rho[输入: rho (256bit)] --> P_GenA
-    Input_key[输入: key (256bit)] --> P_GenS
+    %% 修复点：将包含小括号的文本用双引号包裹起来
+    Input_rho["输入: rho (256bit)"] --> P_GenA
+    Input_key["输入: key (256bit)"] --> P_GenS
     %% Input_rho_prime[输入: rho_prime] -- 未在代码中使用 --> P_Unused
 
     %% --- 过程 1: 生成初始多项式 (扩展) ---
@@ -13,6 +14,7 @@ graph TD
     end
 
     %% --- 数据存储 (RAMs - 初始状态) ---
+    %% 这里使用了 [("...")] 语法来表示圆柱体，内部的文本已经有引号了，通常是没问题的
     P_GenA -- 多项式系数 --> DS_A[("DS1: 矩阵 A 存储<br>(16x RAMs)")]
     P_GenS -- s1 系数 --> DS_s1[("DS2: 向量 s1 存储<br>(4x RAMs)")]
     P_GenS -- s2 系数 --> DS_s2[("DS3: 向量 s2 存储<br>(4x RAMs)")]
@@ -64,4 +66,5 @@ graph TD
     class P_GenA,P_GenS,P_NTT_A,P_NTT_s1,P_NTT_s2,P_PWM,P_Accum,P_Add_s2,P_INTT,P_Round,P_Pack_s1,P_Pack_s2 process;
     class DS_A,DS_s1,DS_s2 store;
     class Input_rho,Input_key,Output_t1,Output_t0,Output_s1,Output_s2 io;
+
     ```

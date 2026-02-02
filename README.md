@@ -1,12 +1,18 @@
 ```mermaid
 graph TD
     %% ================= 定制样式定义 =================
-    classDef func fill:#e3f2fd,stroke:#1565c0,stroke-width:2px; %% 蓝色矩形：函数
-    classDef variable fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px; %% 绿色椭圆：变量
-    classDef param fill:#fff3e0,stroke:#e65100,stroke-width:2px,stroke-dasharray: 5 5,shape:note; %% 橙色便签：参数
-    classDef branch fill:#fce4ec,stroke:#c2185b,stroke-width:2px,shape:diamond; %% 粉色菱形：分支判断
-    classDef loop fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,stroke-dasharray: 5 5,shape:circle; %% 紫色圆形：循环起点
-    classDef process fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 2 2; %% 白色虚线框：主要运算过程集合
+    %% 蓝色矩形：函数
+    classDef func fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
+    %% 绿色椭圆：变量
+    classDef variable fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,rx:5,ry:5;
+    %% 橙色便签：参数
+    classDef param fill:#fff3e0,stroke:#e65100,stroke-width:2px,stroke-dasharray: 5 5,shape:note;
+    %% 粉色菱形：分支判断
+    classDef branch fill:#fce4ec,stroke:#c2185b,stroke-width:2px,shape:diamond;
+    %% 紫色圆形：循环起点
+    classDef loop fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,stroke-dasharray: 5 5,shape:circle;
+    %% 白色虚线框：主要运算过程集合
+    classDef process fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 2 2;
 
     %% ================= 全局参数 =================
     subgraph Global_Params ["全局参数 (Parameter_Generator.m)"]

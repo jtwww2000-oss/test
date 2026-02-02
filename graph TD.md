@@ -1,70 +1,80 @@
 ```mermaid
-graph TD
-    %% --- 输入 ---
-    %% 修复点：将包含小括号的文本用双引号包裹起来
-    Input_rho["输入: rho (256bit)"] --> P_GenA
-    Input_key["输入: key (256bit)"] --> P_GenS
-    %% Input_rho_prime[输入: rho_prime] -- 未在代码中使用 --> P_Unused
+%% 设置图表方向为从左到右，使数据流向更清晰
+graph LR
+    %% --- 样式定义 (采用鲜艳、专业的配色) ---
+    %% 过程节点：深蓝色背景，白色文字
+    classDef process fill:#1565C0,stroke:#0D47A1,stroke-width:2px,color:white,rx:5,ry:5;
+    %% 存储节点：金黄色背景，深色文字，虚线边框
+    classDef store fill:#FFC107,stroke:#FF6F00,stroke-width:2px,stroke-dasharray: 5 5,color:black,rx:5,ry:5;
+    %% 输入输出节点：鲜绿色背景，白色文字
+    classDef io fill:#2E7D32,stroke:#1B5E20,stroke-width:2px,color:white,rx:5,ry:5;
+    %% 默认线条样式：加粗，深灰色
+    linkStyle default stroke-width:2px,stroke:#37474F,fill:none;
 
-    %% --- 过程 1: 生成初始多项式 (扩展) ---
-    %% 注：代码中通过预加载RAM模拟了SHAKE扩展
-    subgraph "扩展阶段 (SHAKE Expansion)"
-        P_GenA("P1: 生成矩阵 A<br>(SHAKE-128 扩展)")
-        P_GenS("P2: 生成向量 s1, s2<br>(SHAKE-256 扩展)")
+    %% ========= 左侧：输入与初始生成 =========
+    subgraph "阶段 1: 输入与扩展"
+        Input_rho["输入: rho (256bit)"]:::io --> P_GenA
+        Input_key["输入: key (256bit)"]:::io --> P_GenS
+
+        P_GenA("P1: 生成矩阵 A<br>(SHAKE-128)"):::process
+        P_GenS("P2: 生成向量 s1, s2<br>(SHAKE-256)"):::process
     end
 
-    %% --- 数据存储 (RAMs - 初始状态) ---
-    %% 这里使用了 [("...")] 语法来表示圆柱体，内部的文本已经有引号了，通常是没问题的
-    P_GenA -- 多项式系数 --> DS_A[("DS1: 矩阵 A 存储<br>(16x RAMs)")]
-    P_GenS -- s1 系数 --> DS_s1[("DS2: 向量 s1 存储<br>(4x RAMs)")]
-    P_GenS -- s2 系数 --> DS_s2[("DS3: 向量 s2 存储<br>(4x RAMs)")]
+    %% ========= 中间：存储与核心计算 =========
+    subgraph "阶段 2: 存储与域变换"
+        %% 数据存储 (圆柱体)
+        DS_A[("DS1: 矩阵 A<br>(16x RAMs)")]:::store
+        DS_s1[("DS2: 向量 s1<br>(4x RAMs)")]:::store
+        DS_s2[("DS3: 向量 s2<br>(4x RAMs)")]:::store
 
-    %% --- 过程 2: NTT 变换 ---
-    subgraph "域变换 (NTT Domain)"
-        P_NTT_A("P3a: NTT 变换 (A)")
-        P_NTT_s1("P3b: NTT 变换 (s1)")
-        P_NTT_s2("P3c: NTT 变换 (s2)")
+        %% 连接生成器到存储
+        P_GenA --> DS_A
+        P_GenS --> DS_s1
+        P_GenS --> DS_s2
+        
+        %% NTT 变换过程
+        P_NTT_A("P3a: NTT(A)"):::process
+        P_NTT_s1("P3b: NTT(s1)"):::process
+        P_NTT_s2("P3c: NTT(s2)"):::process
+
+        %% NTT 数据流 (读 -> 变换 -> 写回)
+        DS_A -- Let A --> P_NTT_A -- NTT(A) --> DS_A
+        DS_s1 -- Let s1 --> P_NTT_s1 -- NTT(s1) --> DS_s1
+        DS_s2 -- Let s2 --> P_NTT_s2 -- NTT(s2) --> DS_s2
     end
 
-    DS_A -- A 多项式 --> P_NTT_A -- NTT(A) --> DS_A
-    DS_s1 -- s1 多项式 --> P_NTT_s1 -- NTT(s1) --> DS_s1
-    DS_s2 -- s2 多项式 --> P_NTT_s2 -- NTT(s2) --> DS_s2
+    subgraph "阶段 3: 核心计算 (NTT域)"
+        %% 点乘与累加
+        P_PWM("P4: 点乘 (PWM)<br>A[i][j]*s1[j]"):::process
+        P_Accum["P5: 累加器 (Sum)"]:::process
+        P_Add_s2("P6: 加法 (+s2)"):::process
 
-    %% --- 过程 3: 矩阵向量运算 ---
-    subgraph "核心计算 ( t = A*s1 + s2 )"
+        %% 计算数据流
         DS_A -- NTT(A) --> P_PWM
         DS_s1 -- NTT(s1) --> P_PWM
-        P_PWM("P4: 点乘 (PWM)<br>NTT(A[i][j]) * NTT(s1[j])") --> P_Accum["P5: 累加器<br>(Sum = Σ PWM)"]
-        DS_s2 -- NTT(s2) --> P_Add_s2
-        P_Accum -- Sum(NTT(A)*NTT(s1)) --> P_Add_s2
-        P_Add_s2("P6: 向量加法<br>Sum + NTT(s2)") -- NTT(t) --> P_INTT
+        P_PWM --> P_Accum --> P_Add_s2
+        DS_s2 -- "NTT(s2)" --> P_Add_s2
     end
 
-    %% --- 过程 4: 逆变换与舍入 ---
-    subgraph "后处理 (Post-processing)"
-        P_INTT("P7: 逆 NTT 变换 (INTT)") -- 多项式 t --> P_Round
-        P_Round("P8: 模约减与舍入<br>(Power2Round)")
+    %% ========= 右侧：后处理与输出 =========
+    subgraph "阶段 4: 后处理与输出"
+        P_INTT("P7: 逆变换 (INTT)"):::process
+        P_Round("P8: 舍入 (Power2Round)"):::process
+        
+        P_Add_s2 -- NTT(t) --> P_INTT -- Poly t --> P_Round
+        
+        %% 公钥输出
+        Output_t1["输出: t1 (高位)"]:::io
+        Output_t0["输出: t0 (低位)"]:::io
+        P_Round --> Output_t1
+        P_Round --> Output_t0
+
+        %% 私钥打包与输出
+        P_Pack_s1("P9a: 打包 s1"):::process
+        P_Pack_s2("P9b: 打包 s2"):::process
+        Output_s1["输出: s1"]:::io
+        Output_s2["输出: s2"]:::io
+
+        DS_s1 -. 最终状态 .-> P_Pack_s1 --> Output_s1
+        DS_s2 -. 最终状态 .-> P_Pack_s2 --> Output_s2
     end
-
-    %% --- 输出 ---
-    P_Round -- "t1 (高位部分)" --> Output_t1[输出: t1_out]
-    P_Round -- "t0 (低位部分)" --> Output_t0[输出: t0_out]
-
-    subgraph "私钥打包 (Packing)"
-       DS_s1 -- s1 (最终状态) --> P_Pack_s1("P9a: 打包 s1")
-       DS_s2 -- s2 (最终状态) --> P_Pack_s2("P9b: 打包 s2")
-    end
-    
-    P_Pack_s1 --> Output_s1[输出: s1_out]
-    P_Pack_s2 --> Output_s2[输出: s2_out]
-
-    %% --- 样式定义 ---
-    classDef process fill:#E3F2FD,stroke:#1565C0,stroke-width:2px;
-    classDef store fill:#FFF9C4,stroke:#FBC02D,stroke-width:2px,stroke-dasharray: 5 5;
-    classDef io fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px;
-
-    class P_GenA,P_GenS,P_NTT_A,P_NTT_s1,P_NTT_s2,P_PWM,P_Accum,P_Add_s2,P_INTT,P_Round,P_Pack_s1,P_Pack_s2 process;
-    class DS_A,DS_s1,DS_s2 store;
-    class Input_rho,Input_key,Output_t1,Output_t0,Output_s1,Output_s2 io;
-
-    ```

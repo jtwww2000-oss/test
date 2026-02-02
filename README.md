@@ -1,190 +1,113 @@
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'fontFamily': 'Arial', 'fontSize': '14px', 'primaryColor': '#fff', 'edgeLabelBackground':'#fff', 'tertiaryColor': '#f4f4f4'}}}%%
 graph TD
-    %% ================= 定制样式定义 =================
-    %% 蓝色矩形：函数
-    classDef func fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
-    %% 绿色椭圆：变量
-    classDef variable fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,rx:5,ry:5;
-    %% 橙色便签：参数
-    classDef param fill:#fff3e0,stroke:#e65100,stroke-width:2px,stroke-dasharray: 5 5,shape:note;
-    %% 粉色菱形：分支判断
-    classDef branch fill:#fce4ec,stroke:#c2185b,stroke-width:2px,shape:diamond;
-    %% 紫色圆形：循环起点
-    classDef loop fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,stroke-dasharray: 5 5,shape:circle;
-    %% 白色虚线框：主要运算过程集合
-    classDef process fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 2 2;
-
-    %% ================= 全局参数 =================
-    subgraph Global_Params ["全局参数 (Parameter_Generator.m)"]
-        Param("security_level (2/3/5)<br>mod_val = 8380417<br>维度: k, l, n=256<br>参数: omega, gamma1/2, tau, beta等"):::param
+    %% --- 全局标题与参数设置 ---
+    title[Isomorphic Data Flow Diagram of CRYSTALS-Dilithium Signature Scheme]
+    subgraph GlobalParams [全局参数配置 (Global Parameters)]
+        style GlobalParams fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+        NOTE_Q[**所有模运算 (mod q) 均基于 q = 8380417**]
+        NOTE_SL[安全等级分支 (Security Levels):<br/>Level 2: k=4, l=4<br/>Level 3: k=6, l=5<br/>Level 5: k=8, l=7]
     end
 
-    %% ================= 签名生成流程 (Sign.m) =================
-    subgraph Sign_Process ["签名生成流程 (Sign.m)"]
+    %% ==================================================
+    %% 阶段一：密钥生成 (Key Generation)
+    %% ==================================================
+    subgraph KeyGen [Phase 1: 密钥生成 (KeyGen)]
+        style KeyGen fill:#fbe9e7,stroke:#d84315,stroke-width:2px
         direction TB
         
-        %% --- 输入 ---
-        M_Sign[/"消息 M"/]:::variable
-        SK_Sign[/"私钥 (s1_hat, s2_hat, t0_hat, rho', K)"/]:::variable
+        KG_In((随机种子 Seed)) --> KG_SHAKE[**SHAKE256**<br/>种子扩展]
+        KG_SHAKE --ρ (256bit)--> KG_GenA[**Rejsam_a**<br/>生成矩阵 A ∈ R_q^(k×l)<br/>(均匀采样)]
+        KG_SHAKE --ρ', K--> KG_GenS[**Rejsam_s**<br/>生成私钥向量 s1, s2<br/>(短系数采样 s_i ∈ [-η, η])]
         
-        %% --- 初始哈希 ---
-        Hash_M_Func["SPONGE256(M, K, ...)"]:::func
-        mu_Sign("μ (消息摘要, 512bit)"):::variable
-        M_Sign -->|SHAKE256| Hash_M_Func
-        SK_Sign -.-> Hash_M_Func
-        Hash_M_Func --> mu_Sign
+        KG_GenS --> KG_NTT_S[**NTT 变换**<br/>多项式环模运算]
+        KG_GenA & KG_NTT_S --> KG_MatMul[矩阵运算: t = A*s1 + s2]
+        KG_MatMul --> KG_NTT_t[**NTT 变换**]
+        KG_NTT_t --> KG_Decomp[**Highbits / Lowbits**<br/>位分解: t -> t1, t0]
+        
+        KG_Decomp --t1--> KG_PackPK[打包公钥 pk = (ρ, t1)]
+        KG_Decomp --t0--> KG_PackSK[打包私钥 sk = (ρ, K, tr, s1, s2, t0)]
+        KG_PackPK --> KG_HashPK[**CRH (SHAKE256)**<br/>计算 tr = H(pk)]
+        KG_HashPK --> KG_PackSK
+        
+        KG_PackPK --> PK_Out((输出 pk))
+        KG_PackSK --> SK_Out((输出 sk))
+    end
 
-        %% --- 拒绝采样循环 ---
-        subgraph Rejection_Loop ["拒绝采样循环 (While rej_flag == 1)"]
-            Loop_Start((循环开始<br>nonce++)):::loop
+    %% ==================================================
+    %% 阶段二：签名生成 (Signature Generation)
+    %% ==================================================
+    subgraph Sign [Phase 2: 签名生成 (Sign)]
+        style Sign fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+        direction TB
+        
+        S_InM((待签消息 M)) & S_InSK((输入 sk)) --> S_Prep[预处理: 解包 sk, 计算 μ = H(tr||M)]
+        S_Prep --> S_LoopStart{拒绝采样循环开始}
+        
+        subgraph RejectionLoop [**Rejection Sampling Loop**]
+            style RejectionLoop fill:#fff,stroke:#aaa,stroke-dasharray: 5 5
+            S_LoopStart --κ (计数器)--> S_RejY[**Rejsam_y**<br/>采样掩码向量 y<br/>(非均匀, 范围较大)]
+            S_RejY --> S_NTT_Y[**NTT 变换**] --> S_MatMul_Ay[矩阵运算: w = A*y]
+            S_MatMul_Ay --> S_INTT_w[**INTT 变换**] --> S_Decomp_w[**Highbits**<br/>w -> w1]
             
-            %% 1. 生成 y 并变换
-            Rejsam_y_Func["Rejsam_y(rho', nonce, ...)"]:::func
-            y_Sign("y (随机向量, l×n)"):::variable
-            NTT_y_Func["ntt(y)"]:::func
-            y_hat_Sign("y_hat (NTT域)"):::variable
+            S_Prep --μ--> S_HashC
+            S_Decomp_w --w1--> S_HashC[**SampleInBall (SHAKE)**<br/>生成挑战多项式 c<br/>(稀疏三元多项式)]
+            S_HashC --c--> S_NTT_C[**NTT 变换**]
             
-            Loop_Start --> Rejsam_y_Func
-            SK_Sign -.->|"rho'"| Rejsam_y_Func
-            Rejsam_y_Func -->|"SHAKE256采样 & mod运算"| y_Sign
-            y_Sign -->|"NTT变换"| NTT_y_Func --> y_hat_Sign
-
-            %% 2. 计算 w
-            MatrixMult_w_Func["A_hat * y_hat"]:::process
-            w_hat_Sign("w_hat (NTT域, k×n)"):::variable
-            INTT_w_Func["intt(w_hat)"]:::func
-            w_Sign("w (时域向量)"):::variable
+            S_NTT_C & S_InSK --> S_CalcZ[计算 z = y + c*s1]
+            S_NTT_C & S_InSK & S_INTT_w --> S_CalcR0[计算 r0 = Lowbits(w - c*s2)]
             
-            y_hat_Sign -->|"矩阵乘法 (Pointwise Mont)"| MatrixMult_w_Func
-            MatrixMult_w_Func --> w_hat_Sign
-            w_hat_Sign -->|"INTT变换"| INTT_w_Func --> w_Sign
-
-            %% 3. 生成挑战 c
-            Decompose_w_Func["Decompose(w, 2*gamma2, ...)"]:::func
-            w1_Sign("w1 (w的高位部分)"):::variable
-            Hash_c_Func["SPONGE256(μ, w1_encode)"]:::func
-            c_raw_Sign("c_raw (256bit哈希值)"):::variable
-            SampleInBall_Func["SampleInBall(c_raw, tau)"]:::func
-            c_poly_Sign("c (挑战多项式, τ个±1)"):::variable
-            NTT_c_Func["ntt(c)"]:::func
-            c_hat_Sign("c_hat (NTT域)"):::variable
-
-            w_Sign -->|"位分解 & mod运算"| Decompose_w_Func --> w1_Sign
-            mu_Sign -.-> Hash_c_Func
-            w1_Sign -->|"编码 & SHAKE256"| Hash_c_Func --> c_raw_Sign
-            c_raw_Sign -->|"SHAKE256采样"| SampleInBall_Func --> c_poly_Sign
-            c_poly_Sign -->|"NTT变换"| NTT_c_Func --> c_hat_Sign
-
-            %% 4. 计算潜在签名 z 和 r0
-            Calc_z_proc["z = y + intt(c_hat * s1_hat)"]:::process
-            z_Sign("z (候选签名向量, l×n)"):::variable
-            Calc_r0_proc["r0 = Lowbits(w - intt(c_hat * s2_hat))"]:::func
-            r0_Sign("r0 (低位余数向量, k×n)"):::variable
-
-            y_Sign --> Calc_z_proc
-            c_hat_Sign --> Calc_z_proc
-            SK_Sign -.->|"s1_hat"| Calc_z_proc
-            Calc_z_proc -->|"多项式乘加, INTT & mod"| z_Sign
-
-            w_Sign --> Calc_r0_proc
-            c_hat_Sign --> Calc_r0_proc
-            SK_Sign -.->|"s2_hat"| Calc_r0_proc
-            Calc_r0_proc -->|"多项式运算, Lowbits & mod"| r0_Sign
-
-            %% 5. 安全性检查 (分支)
-            Check_Norms{"检查 Norm(z), Norm(r0)<br>及 Makehint 边界"}:::branch
-            z_Sign --> Check_Norms
-            r0_Sign --> Check_Norms
-            c_hat_Sign -.-> Check_Norms
-            SK_Sign -.->|"t0_hat, s2_hat"| Check_Norms
-
-            Check_Norms --"不通过 (rej_flag=1)"--> Loop_Start
+            S_CalcZ & S_CalcR0 --> S_Check1{**Check 1**<br/>检查 z, r0 范数<br/>是否越界?}
+            S_Check1 --Yes (Reject)--> S_LoopStart
+            
+            S_Check1 --No (Pass)--> S_MakeHint[**MakeHint**<br/>生成提示 h<br/>基于 -ct0 和 w-cs2+ct0]
+            S_MakeHint --> S_Check2{**Check 2**<br/>检查 ct0 范数 &<br/>h 中 1 的个数?}
+            S_Check2 --Yes (Reject)--> S_LoopStart
         end
-
-        %% --- 生成 Hint 并输出 ---
-        Check_Norms --"通过 (rej_flag=0)"--> Makehint_Func
-        Makehint_Func["Makehint_pre(w, c_hat, s2_hat, t0_hat, ...)"]:::func
-        h_Sign("h (Hint向量, k×n, 汉明重还限制)"):::variable
-        Signature_Out[/"签名 Sigma = (z, h, c_raw)"/]:::variable
-
-        w_Sign -.-> Makehint_Func
-        c_hat_Sign -.-> Makehint_Func
-        Makehint_Func -->|"Hint计算 & mod运算"| h_Sign
         
-        z_Sign --> Signature_Out
-        h_Sign --> Signature_Out
-        c_raw_Sign --> Signature_Out
+        S_Check2 --No (Pass)--> S_PackSig[打包签名 σ = (z, h)]
+        S_PackSig --> Sig_Out((输出签名 σ))
     end
 
-    %% ================= 签名验证流程 (Verify.m) =================
-    subgraph Verify_Process ["签名验证流程 (Verify.m)"]
+    %% ==================================================
+    %% 阶段三：签名验证 (Verification)
+    %% ==================================================
+    subgraph Verify [Phase 3: 签名验证 (Verify)]
+        style Verify fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
         direction TB
         
-        %% --- 输入 ---
-        M_Ver[/"消息 M"/]:::variable
-        Sig_Ver[/"签名 (z, h, c_raw)"/]:::variable
-        PK_Ver[/"公钥 (A_hat, t1_hat, rho)"/]:::variable
+        V_InM((消息 M)) & V_InPK((公钥 pk)) & V_InSig((签名 σ)) --> V_Unpack[解包: pk(ρ, t1), σ(z, h)]
         
-        %% --- 初始哈希 ---
-        Hash_M_Ver_Func["SPONGE256(M, PK_hash, ...)"]:::func
-        mu_Ver("μ' (消息摘要)"):::variable
-        M_Ver -->|SHAKE256| Hash_M_Ver_Func
-        PK_Ver -.->|"Hash(PK)"| Hash_M_Ver_Func
-        Hash_M_Ver_Func --> mu_Ver
-
-        %% --- 解析签名与变换 ---
-        Sig_Ver --> z_Ver("z"):::variable
-        Sig_Ver --> h_Ver("h"):::variable
-        Sig_Ver --> c_raw_Ver("c_raw"):::variable
+        V_Unpack --> V_CheckZ{**Check z**<br/>检查 z 的无穷范数<br/>是否 < γ1 - β?}
+        V_CheckZ --Yes (Fail)--> V_ResInvalid((验证失败 Invalid))
         
-        NTT_z_Func["ntt(z)"]:::func
-        z_hat_Ver("z_hat (NTT域)"):::variable
-        z_Ver -->|"NTT变换"| NTT_z_Func --> z_hat_Ver
-
-        %% --- 重构挑战 c ---
-        SampleInBall_Ver_Func["SampleInBall(c_raw, tau)"]:::func
-        c_poly_Ver("c' (多项式)"):::variable
-        NTT_c_Ver_Func["ntt(c')"]:::func
-        c_hat_Ver("c'_hat (NTT域)"):::variable
-        c_raw_Ver -->|"SHAKE256采样"| SampleInBall_Ver_Func --> c_poly_Ver
-        c_poly_Ver -->|"NTT变换"| NTT_c_Ver_Func --> c_hat_Ver
-
-        %% --- 重构 w 的近似值 w' ---
-        Reconstruct_w_Proc["A_hat * z_hat - c'_hat * t1_hat * 2^d"]:::process
-        w_approx_hat_Ver("w'_hat (NTT域近似值)"):::variable
-        INTT_w_Ver_Func["intt(w'_hat)"]:::func
-        w_approx_Ver("w' (时域近似值)"):::variable
+        V_CheckZ --No (Pass)--> V_Recon[重建阶段]
+        V_Unpack --ρ--> V_GenA[**Rejsam_a**<br/>重建矩阵 A]
+        V_Unpack --pk--> V_HashPK[**CRH**<br/>重建 tr = H(pk)]
+        V_HashPK & V_InM --> V_HashMu[**CRH**<br/>重建 μ = H(tr||M)]
         
-        PK_Ver -.->|"A_hat, t1_hat"| Reconstruct_w_Proc
-        z_hat_Ver --> Reconstruct_w_Proc
-        c_hat_Ver --> Reconstruct_w_Proc
-        Reconstruct_w_Proc -->|"矩阵运算, 多项式乘sub & mod"| w_approx_hat_Ver
-        w_approx_hat_Ver -->|"INTT变换"| INTT_w_Ver_Func --> w_approx_Ver
-
-        %% --- 使用 Hint 恢复 w1' ---
-        UseHint_Func["UseHint(w', h, 2*gamma2, ...)"]:::func
-        w1_prime_Ver("w1' (恢复的高位部分)"):::variable
-        w_approx_Ver --> UseHint_Func
-        h_Ver --> UseHint_Func
-        UseHint_Func -->|"Hint应用 & mod运算"| w1_prime_Ver
-
-        %% --- 计算验证哈希 c' ---
-        Hash_c_prime_Func["SPONGE256(μ', w1'_encode)"]:::func
-        c_prime_raw_Ver("c'_raw (计算出的哈希)"):::variable
-        mu_Ver -.-> Hash_c_prime_Func
-        w1_prime_Ver -->|"编码 & SHAKE256"| Hash_c_prime_Func --> c_prime_raw_Ver
-
-        %% --- 最终比对 (分支) ---
-        Final_Check{"c_raw == c'_raw?<br>AND<br>Norm(z) check?"}:::branch
-        c_raw_Ver --> Final_Check
-        c_prime_raw_Ver --> Final_Check
-        z_Ver -.->|"Norm检查"| Final_Check
-
-        Final_Check --"True"--> Valid_Res[/"验证通过 (Accept)"/]:::variable
-        Final_Check --"False"--> Invalid_Res[/"验证失败 (Reject)"/]:::variable
+        V_Unpack --z--> V_NTT_Z[**NTT 变换**]
+        V_GenA & V_NTT_Z & V_Unpack --t1--> V_ApproxW[计算近似 w'<br/>A*z - t1*2^d]
+        V_ApproxW --> V_INTT_W[**INTT 变换**]
+        
+        V_INTT_W & V_Unpack --h--> V_UseHint[**UseHint**<br/>利用 hint h 重建 w1']
+        V_HashMu & V_UseHint --> V_ReconC[**SampleInBall**<br/>重建挑战 c']
+        
+        V_ReconC & V_Unpack --h--> V_FinalCheck{**Final Check**<br/>验证 hint h 是否匹配<br/>生成的 c' 和 w'?}
+        
+        %% 注：标准流程通常比较 c'与c，但Dilithium实际实现通常比较 hint 是否一致
+        V_FinalCheck --Yes (Match)--> V_ResValid((验证成功 Valid))
+        V_FinalCheck --No (Mismatch)--> V_ResInvalid
     end
 
-    %% ================= 跨流程关联与参数影响 =================
-    Param -.-> Sign_Process
-    Param -.-> Verify_Process
-    Signature_Out === Sig_Ver
+    %% --- 跨阶段依赖关系 (虚线) ---
+    PK_Out -.-> V_InPK
+    SK_Out -.-> S_InSK
+    Sig_Out -.-> V_InSig
+
+    %% --- 样式调整 ---
+    classDef process fill:#fff,stroke:#333,stroke-width:1px;
+    classDef decision fill:#fff,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5;
+    classDef boldOp font-weight:bold;
+    
+    class KG_SHAKE,KG_GenA,KG_GenS,KG_NTT_S,KG_NTT_t,KG_Decomp,KG_HashPK,S_RejY,S_NTT_Y,S_INTT_w,S_Decomp_w,S_HashC,S_NTT_C,S_MakeHint,V_GenA,V_HashPK,V_HashMu,V_NTT_Z,V_INTT_W,V_UseHint,V_ReconC boldOp;

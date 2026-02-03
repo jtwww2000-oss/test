@@ -12,7 +12,7 @@ rho-->ExpandA
 K-->ExpandS
 rhot-->ExpandS
 ExpandA-->A("A")
-ExpandS-->s1s2("s1(NTT域)\n s2(时域)")
+ExpandS-->s1s2("s1(NTT域)s2(时域)")
 MultAdd("t = A*s1 + s2 ")
 A-->MultAdd
 s1s2-->MultAdd

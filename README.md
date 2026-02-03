@@ -1,5 +1,4 @@
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontFamily': 'Arial', 'fontSize': '14px', 'primaryColor': '#fff', 'edgeLabelBackground':'#fff', 'tertiaryColor': '#f4f4f4'}}}%%
 graph TD
     %% --- 全局标题与参数设置 ---
     title[Isomorphic Data Flow Diagram of CRYSTALS-Dilithium Signature Scheme]

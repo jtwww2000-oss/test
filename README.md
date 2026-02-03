@@ -1,7 +1,7 @@
 ```mermaid
 flowchart TB
 RS(Random Seed)
-SHAKE[SHAKE (Seed Expansion)]
+SHAKE["SHAKE (Seed Expansion)"]
 RS-->SHAKE
 SHAKE-->rho(rho)
 SHAKE-->K(K)

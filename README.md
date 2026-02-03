@@ -1,22 +1,22 @@
 ```mermaid
 flowchart TB
-RS("Random Seed")
-SHAKE("SHAKE (Seed Expansion)")
+RS("随机种子")
+SHAKE("Shake(扩展种子)")
 RS-->SHAKE
 SHAKE-->rho("rho")
 SHAKE-->K("K")
-SHAKE-->rhot("rho t")
-ExpandA("ExpandA (NTT form)")
-ExpandS("ExpandS (Rejsam_s/s1∈[-2,2], NTT form)")
+SHAKE-->rhot("rho'")
+ExpandA("矩阵A (NTT 域)")
+ExpandS("向量S (拒绝采样/s1∈[-2,2], NTT域)")
 rho-->ExpandA
 K-->ExpandS
 rhot-->ExpandS
 ExpandA-->A("A")
-ExpandS-->s1s2("s1, s2")
-MultAdd("t = A*s1 + s2 (NTT mult/add)")
+ExpandS-->s1s2("s1(NTT域)\n s2(时域)")
+MultAdd("t = A*s1 + s2 ")
 A-->MultAdd
 s1s2-->MultAdd
-Power2Round("Power2Round (d)")
+Power2Round("Power2Round (t)")
 MultAdd-->Power2Round
 Power2Round-->t1("t1 Highbits")
 Power2Round-->t0("t0 Lowbits")

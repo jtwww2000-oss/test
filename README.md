@@ -1,6 +1,5 @@
 ```mermaid
-
-   flowchart TB
+flowchart TB
 RS(Random Seed)
 SHAKE[SHAKE (Seed Expansion)]
 RS-->SHAKE
@@ -30,5 +29,7 @@ SK(Private Key (sk) = (rho, K, tr, s1, s2, t0))
 rho-->SK
 K-->SK
 tr-->SK
+s1s2-->SK
+t0-->SK
 s1s2-->SK
 t0-->SK
